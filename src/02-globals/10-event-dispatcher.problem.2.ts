@@ -1,5 +1,13 @@
 import { expect, it } from "vitest";
 
+declare global {
+  interface DispatchableEvent {
+    UPDATE_USERNAME: {
+      username: string;
+    };
+  }
+}
+
 /**
  * How do we add a LOG_OUT and UPDATE_USERNAME events to the
  * DispatchableEvent interface from WITHIN

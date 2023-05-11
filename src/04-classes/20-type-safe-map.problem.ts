@@ -18,7 +18,16 @@ class TypeSafeStringMap<TMap extends Record<string, string> = {}> {
     return this.map[key];
   }
 
-  set<K extends string>(key: K, value: string): unknown {
+  set<K extends string>(
+    key: K,
+    value: string
+  ): TypeSafeStringMap<
+    TMap & {
+      // I wonder how could I do it without Record itself {[TK in K]:string} -- > got It
+      [TK in K]: string;
+      // Record<K, string>
+    }
+  > {
     (this.map[key] as any) = value;
 
     return this;
@@ -33,7 +42,7 @@ const map = new TypeSafeStringMap()
 it("Should not allow getting values which do not exist", () => {
   map.get(
     // @ts-expect-error
-    "jim",
+    "jim"
   );
 });
 

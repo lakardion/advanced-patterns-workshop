@@ -22,10 +22,10 @@ class TypeSafeStringMap<TMap extends Record<string, string> = {}> {
     key: K,
     value: string
   ): TypeSafeStringMap<
-    TMap & {
-      // I wonder how could I do it without Record itself {[TK in K]:string} -- > got It
+    TMap & // Record<K, string>
+    // I wonder how could I do it without Record itself {[TK in K]:string} -- > got It
+    {
       [TK in K]: string;
-      // Record<K, string>
     }
   > {
     (this.map[key] as any) = value;

@@ -3,12 +3,13 @@ import { it } from "vitest";
 import { z, ZodError } from "zod";
 import { Equal, Expect } from "../helpers/type-utils";
 
-const makeTypeSafeHandler = (
+// we probably could have avoided z.Zchema and instead simply infer the output of the schema.
+const makeTypeSafeHandler = <TQ extends z.Schema, TB extends z.Schema>(
   config: {
-    query?: z.Schema;
-    body?: z.Schema;
+    query?: TQ;
+    body?: TB;
   },
-  handler: RequestHandler
+  handler: RequestHandler<any, any, z.infer<TB>, z.infer<TQ>>
 ): RequestHandler => {
   return (req, res, next) => {
     const { query, body } = req;

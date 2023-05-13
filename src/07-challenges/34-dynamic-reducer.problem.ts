@@ -17,36 +17,6 @@ type TestingPayloadsToDiscriminatedUnion = PayloadsToDiscriminatedUnion<{
   LOG_OUT: {};
 }>;
 
-type ExtractActions<T extends Record<string, any>> = {
-  [K in keyof T]: T[K] extends (...args: infer TArgs) => any
-    ? TArgs extends [state: any, payload: infer TPayload]
-      ? TPayload
-      : {}
-    : never;
-};
-
-type extractActionSubject = {
-  noArgs: () => any;
-  justState: (state: "justState") => any;
-  stateAndPayload: (
-    state: "stateAndPayload",
-    payload: {
-      aPayload: "hello";
-    }
-  ) => any;
-};
-type testExtractActions = ExtractActions<extractActionSubject>;
-//    ^?
-type testGetPayloads = PayloadsToDiscriminatedUnion<testExtractActions>;
-//    ^?
-
-type expectExtractActions = Expect<
-  Equal<
-    testExtractActions,
-    { noArgs: {}; justState: {}; stateAndPayload: { aPayload: "hello" } }
-  >
->;
-
 /**
  * Clue:
  *
@@ -54,32 +24,24 @@ type expectExtractActions = Expect<
  */
 export class DynamicReducer<
   TState,
-  TBuilder extends Record<string, (...args: any[]) => any> = {}
+  TPayloadMap extends Record<string, any> = {}
 > {
-  private handlers: TBuilder;
-
-  constructor() {
-    this.handlers = {} as TBuilder;
-  }
+  private handlers = {} as Record<
+    string,
+    (state: TState, payload: any) => TState
+  >;
 
   addHandler<TActionType extends string, TPayload>(
     type: TActionType,
-    handler: (state: TActionType, payload: TPayload) => TState
-  ): this &
-    DynamicReducer<
-      TState,
-      TBuilder & {
-        [K in TActionType]: (state: TActionType, payload: TPayload) => TState;
-      }
-    > {
-    (this.handlers as any)[type] = handler;
-
-    return this as any;
+    handler: (state: TState, payload: TPayload) => TState
+  ): DynamicReducer<TState, TPayloadMap & Record<TActionType, TPayload>> {
+    this.handlers[type] = handler;
+    return this;
   }
 
   reduce(
     state: TState,
-    action: PayloadsToDiscriminatedUnion<ExtractActions<TBuilder>>
+    action: PayloadsToDiscriminatedUnion<TPayloadMap>
   ): TState {
     const handler = this.handlers[action.type];
     if (!handler) {
@@ -142,19 +104,19 @@ it("Should error if you pass it an incorrect action", () => {
     },
     { type: "LOG_OUT" }
   );
-  // @ts-expect-error
   const state = reducer.reduce(
     { username: "foo", password: "bar" },
     {
+      // @ts-expect-error
       type: "NOT_ALLOWED",
     }
   );
 });
 
 it("Should error if you pass an incorrect payload", () => {
-  // @ts-expect-error
   const state = reducer.reduce(
     { username: "foo", password: "bar" },
+    // @ts-expect-error
     {
       type: "LOG_IN",
     }

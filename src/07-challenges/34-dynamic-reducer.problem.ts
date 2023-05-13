@@ -17,24 +17,89 @@ type TestingPayloadsToDiscriminatedUnion = PayloadsToDiscriminatedUnion<{
   LOG_OUT: {};
 }>;
 
+//failure
+// type Handlers <T> = T extends {
+//   [K: string]: (state: typeof K, payload: any) => any;
+// } ? T : never
+
+// const checkHandlers = <THandlers extends Handlers<any>>(handler:THandlers)=>{
+//   return handler
+// }
+
+// checkHandlers({
+//   Hello:(state,payload)=>{
+//     return;
+//   }
+// })
+
+//testing
+type GetHandlerInformation<T extends Record<string, any>> = T extends Record<
+  infer TKeys,
+  (...args: any[]) => any
+>
+  ? {
+      [K in TKeys as T[K] extends (...args: infer TArgs) => any
+        ? K
+        : never]: T[K] extends (...args: infer TArgs) => any
+        ? TArgs extends [state: any, payload: infer TPayload]
+          ? TPayload
+          : {}
+        : never;
+    }
+  : never;
+
+type testGetHandlerInformation = GetHandlerInformation<{
+  //      ^?
+  hello: () => any;
+  justState: (state: { hola: number }) => any;
+  stateAndPayload: (state: string, payload: { payload: number }) => any;
+}>;
+
+type resultFromPayloadsToDiscriminatedUnion =
+  PayloadsToDiscriminatedUnion<testGetHandlerInformation>;
+//    ^?
+
+//Okay wow... so no matter the number of arguments, functions extend anyway...
+type testFnExtension = ((state: string) => any) extends (
+  //    ^?
+  state: string,
+  payload: any
+) => any
+  ? true
+  : false;
+type testFnExtensionReverse = ((state: string, payload: any) => any) extends (
+  //    ^?
+  state: string
+) => any
+  ? true
+  : false;
+
 /**
  * Clue:
  *
  * You'll need to add two generics here!
  */
-export class DynamicReducer {
-  private handlers = {} as unknown;
+export class DynamicReducer<
+  TState,
+  TBuilder extends Record<string, (...args: any[]) => any> = {}
+> {
+  private handlers = {} as TBuilder;
 
-  addHandler(
-    type: unknown,
-    handler: (state: unknown, payload: unknown) => unknown
-  ): unknown {
-    this.handlers[type] = handler;
-
-    return this;
+  addHandler<TAction extends string = never, TPayload = never>(
+    type: TAction,
+    // have to do something here so that we avoid getting cut off by the type inference. Seems like the fact that we're requiring args here is just messing up the handler type n the return
+    handler: (state: TAction, payload: TPayload) => TState
+  ): DynamicReducer<
+    TState,
+    TBuilder & {
+      type: TAction;
+      handler: (state: TAction, payload: TPayload) => TState;
+    }
+  > {
+    (this.handlers[type] as any) = handler;
+    return this as any;
   }
-
-  reduce(state: unknown, action: unknown): unknown {
+  reduce(state: TState, action: unknown): unknown {
     const handler = this.handlers[action.type];
     if (!handler) {
       return state;
@@ -43,6 +108,17 @@ export class DynamicReducer {
     return handler(state, action);
   }
 }
+
+const testMyReducer = new DynamicReducer<{ myState: number }>()
+  //    ^?
+  .addHandler("hello", (state, payload: { myGoodness: string }) => ({
+    myState: 1,
+  }));
+// .addHandler(
+//   "myOtherHandler",
+//   (state, payload: { wowSuchAPayload: number }) => ({ myState: 2 })
+// );
+testMyReducer.reduce({ myState: 2 }, { type: "" });
 
 interface State {
   username: string;

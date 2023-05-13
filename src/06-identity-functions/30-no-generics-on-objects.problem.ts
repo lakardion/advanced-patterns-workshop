@@ -13,7 +13,18 @@
  * const config = makeConfigObj(config);
  */
 
-export const configObj = {
+import { F } from "ts-toolbelt";
+
+// ok this actually works I thought it would not lol
+export const makeConfigObj = <
+  const TRoutes extends ReadonlyArray<string>,
+  TFetchers extends Record<F.NoInfer<TRoutes>[number], (...args: any[]) => any>
+>(config: {
+  routes: TRoutes;
+  fetchers: TFetchers;
+}) => config;
+
+const config = makeConfigObj({
   routes: ["/", "/about", "/contact"],
   fetchers: {
     // @ts-expect-error
@@ -21,4 +32,39 @@ export const configObj = {
       return {};
     },
   },
+});
+
+//Matts solution would allow us not to do this? -- happens the same
+const seedConfig = {
+  routes: ["/", "/about", "/contact"],
+  fetchers: {
+    "/does-not-exist": () => {
+      return {};
+    },
+  },
 };
+
+interface ConfigObj<TRoute extends string> {
+  routes: TRoute[];
+  fetchers: {
+    [K in TRoute]: () => any;
+  };
+}
+const makeOtherConfigObj = <TRoute extends string>(
+  config: ConfigObj<TRoute>
+) => {
+  return config;
+};
+// no it does not
+const otherConfig = makeOtherConfigObj(seedConfig);
+
+// This works because we pass the parameter here
+makeOtherConfigObj({
+  routes: ["/", "/about", "/contact"],
+  fetchers: {
+    //@ts-expect-error
+    "/does-not-exist": () => {
+      return {};
+    },
+  },
+});

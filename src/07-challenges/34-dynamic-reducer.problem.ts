@@ -17,62 +17,35 @@ type TestingPayloadsToDiscriminatedUnion = PayloadsToDiscriminatedUnion<{
   LOG_OUT: {};
 }>;
 
-//failure
-// type Handlers <T> = T extends {
-//   [K: string]: (state: typeof K, payload: any) => any;
-// } ? T : never
+type ExtractActions<T extends Record<string, any>> = {
+  [K in keyof T]: T[K] extends (...args: infer TArgs) => any
+    ? TArgs extends [state: any, payload: infer TPayload]
+      ? TPayload
+      : {}
+    : never;
+};
 
-// const checkHandlers = <THandlers extends Handlers<any>>(handler:THandlers)=>{
-//   return handler
-// }
-
-// checkHandlers({
-//   Hello:(state,payload)=>{
-//     return;
-//   }
-// })
-
-//testing
-type GetHandlerInformation<T extends Record<string, any>> = T extends Record<
-  infer TKeys,
-  (...args: any[]) => any
->
-  ? {
-      [K in TKeys as T[K] extends (...args: infer TArgs) => any
-        ? K
-        : never]: T[K] extends (...args: infer TArgs) => any
-        ? TArgs extends [state: any, payload: infer TPayload]
-          ? TPayload
-          : {}
-        : never;
+type extractActionSubject = {
+  noArgs: () => any;
+  justState: (state: "justState") => any;
+  stateAndPayload: (
+    state: "stateAndPayload",
+    payload: {
+      aPayload: "hello";
     }
-  : never;
-
-type testGetHandlerInformation = GetHandlerInformation<{
-  //      ^?
-  hello: () => any;
-  justState: (state: { hola: number }) => any;
-  stateAndPayload: (state: string, payload: { payload: number }) => any;
-}>;
-
-type resultFromPayloadsToDiscriminatedUnion =
-  PayloadsToDiscriminatedUnion<testGetHandlerInformation>;
+  ) => any;
+};
+type testExtractActions = ExtractActions<extractActionSubject>;
+//    ^?
+type testGetPayloads = PayloadsToDiscriminatedUnion<testExtractActions>;
 //    ^?
 
-//Okay wow... so no matter the number of arguments, functions extend anyway...
-type testFnExtension = ((state: string) => any) extends (
-  //    ^?
-  state: string,
-  payload: any
-) => any
-  ? true
-  : false;
-type testFnExtensionReverse = ((state: string, payload: any) => any) extends (
-  //    ^?
-  state: string
-) => any
-  ? true
-  : false;
+type expectExtractActions = Expect<
+  Equal<
+    testExtractActions,
+    { noArgs: {}; justState: {}; stateAndPayload: { aPayload: "hello" } }
+  >
+>;
 
 /**
  * Clue:
@@ -83,23 +56,31 @@ export class DynamicReducer<
   TState,
   TBuilder extends Record<string, (...args: any[]) => any> = {}
 > {
-  private handlers = {} as TBuilder;
+  private handlers: TBuilder;
 
-  addHandler<TAction extends string = never, TPayload = never>(
-    type: TAction,
-    // have to do something here so that we avoid getting cut off by the type inference. Seems like the fact that we're requiring args here is just messing up the handler type n the return
-    handler: (state: TAction, payload: TPayload) => TState
-  ): DynamicReducer<
-    TState,
-    TBuilder & {
-      type: TAction;
-      handler: (state: TAction, payload: TPayload) => TState;
-    }
-  > {
-    (this.handlers[type] as any) = handler;
+  constructor() {
+    this.handlers = {} as TBuilder;
+  }
+
+  addHandler<TActionType extends string, TPayload>(
+    type: TActionType,
+    handler: (state: TActionType, payload: TPayload) => TState
+  ): this &
+    DynamicReducer<
+      TState,
+      TBuilder & {
+        [K in TActionType]: (state: TActionType, payload: TPayload) => TState;
+      }
+    > {
+    (this.handlers as any)[type] = handler;
+
     return this as any;
   }
-  reduce(state: TState, action: unknown): unknown {
+
+  reduce(
+    state: TState,
+    action: PayloadsToDiscriminatedUnion<ExtractActions<TBuilder>>
+  ): TState {
     const handler = this.handlers[action.type];
     if (!handler) {
       return state;
@@ -108,17 +89,6 @@ export class DynamicReducer<
     return handler(state, action);
   }
 }
-
-const testMyReducer = new DynamicReducer<{ myState: number }>()
-  //    ^?
-  .addHandler("hello", (state, payload: { myGoodness: string }) => ({
-    myState: 1,
-  }));
-// .addHandler(
-//   "myOtherHandler",
-//   (state, payload: { wowSuchAPayload: number }) => ({ myState: 2 })
-// );
-testMyReducer.reduce({ myState: 2 }, { type: "" });
 
 interface State {
   username: string;
@@ -156,7 +126,7 @@ it("Should return the new state after LOG_IN", () => {
 it("Should return the new state after LOG_OUT", () => {
   const state = reducer.reduce(
     { username: "foo", password: "bar" },
-    { type: "LOG_OUT" }
+    { type: "LOG_IN", password: "", username: "" }
   );
 
   type test = [Expect<Equal<typeof state, State>>];
@@ -165,19 +135,26 @@ it("Should return the new state after LOG_OUT", () => {
 });
 
 it("Should error if you pass it an incorrect action", () => {
+  reducer.reduce(
+    {
+      username: "hello",
+      password: "hello",
+    },
+    { type: "LOG_OUT" }
+  );
+  // @ts-expect-error
   const state = reducer.reduce(
     { username: "foo", password: "bar" },
     {
-      // @ts-expect-error
       type: "NOT_ALLOWED",
     }
   );
 });
 
 it("Should error if you pass an incorrect payload", () => {
+  // @ts-expect-error
   const state = reducer.reduce(
     { username: "foo", password: "bar" },
-    // @ts-expect-error
     {
       type: "LOG_IN",
     }
